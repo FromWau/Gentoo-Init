@@ -160,6 +160,21 @@ sed -i "/$LOCALE/s/^#//g" /mnt/arch/etc/locale.gen &&
 arch-chroot /mnt/arch /bin/bash -c "locale-gen" && 
 echo "LANG=$LOCALE" > /mnt/arch/etc/locale.conf
 
+
+# Setting x11 keyboard
+arch-chroot /mnt/arch /bin/bash -c "localectl --no-convert set-keymap de-latin1" &&
+cat <<EOF > /mnt/arch/etc/X11/xorg.conf.d/00-keyboard.conf
+# Written by systemd-localed(8), read by systemd-localed and Xorg. It's
+# probably wise not to edit this file manually. Use localectl(1) to
+# instruct systemd-localed to update it.
+Section "InputClass"
+        Identifier "system-keyboard"
+        MatchIsKeyboard "on"
+        Option "XkbLayout" "de"
+EndSection
+EOF
+
+
 # Host
 HOST='arsus'
 echo "${HOST}" > /mnt/arch/etc/hostname
@@ -174,8 +189,8 @@ arch-chroot /mnt/arch /bin/bash -c "hwclock --systohc"
 
 
 # Install pkgs for desktop 
-pacstrap /mnt/arch picom sxhkd sddm iwd powerdevil \
-            ranger  rofi rofi-calc kdeconnect \
+pacstrap /mnt/arch sxhkd sddm iwd powerdevil feh \
+            ranger python-pillow rofi rofi-calc kdeconnect jq \
             neofetch man tldr reflector btop exa procs ripgrep \
             firefox kitty zsh dash neovim  thunderbird discord  \
             alsa-firmware alsa-ucm-conf sof-firmware pipewire pipewire-alsa pipewire-audio playerctl \
@@ -219,7 +234,7 @@ arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'export CARGO_HOME=
     cd ~/yay-git &&
     makepkg -si --noconfirm &&
     rm -rf ~/yay-git &&
-    yay -Syyyu timeshift-bin polybar-git ranger_devicons-git ncspot-cover awesome-git --noconfirm --removemake --rebuild'"
+    yay -Syyyu timeshift-bin polybar-git ranger_devicons-git ncspot-cover awesome-git nerdfetch lolcat shell-color-scripts cowsay ttf-firacode-nerd picom-rounded-corners python-pip --noconfirm --removemake --rebuild'"
 
 
 # Download dotfiles
@@ -252,8 +267,6 @@ arch-chroot /mnt/arch /bin/bash -c "systemctl enable NetworkManager &&
     systemctl enable bluetooth.service &&
     systemctl enable upower.service &&
     systemctl --user enable playerctld.service"
-# iwd
-# systemd-networkd
 
 # Setup NetworkManager use iwd as backend and copy already setup networks
 printf "[device]\nwifi.backend=iwd\n" > /mnt/arch/etc/NetworkManager/conf.d/wifi_backend.conf && 
@@ -261,8 +274,14 @@ mkdir -p /mnt/arch/var/lib/iwd/ &&
 cp -r /var/lib/iwd/* /mnt/arch/var/lib/iwd/
 
 
-# Setup nvim
-arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'nvim --headless +source +PackerSync +qa'"
+# Setup nvim (in general not working???)
+#arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'nvim --headless +source +PackerSync +qa'"
+
+
+# Install WeatherScrapper dependencies
+arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'curl -O https://raw.githubusercontent.com/FromWau/WeatherScraper/main/requirements.txt && 
+    pip install -r requirements.txt'"
+
 
 
 # Enable wheel properly
@@ -278,7 +297,7 @@ rm -rf /mnt/arch/home/"$USER_NAME"/.cargo
 
 
 echo 'DONE'
-echo 'for changing the keymap use:'
+echo 'for changing the keymap and in sddm use:'
 echo 'localectl set-x11-keymap de'
 echo
 echo 'to reboot run:'
