@@ -16,11 +16,9 @@
 
 
 localectl set-keymap de-latin1
-timedatectl set-timezone Europe/Vienna
 
-
+timedatectl set-timezone Europe/Vienna &&
 timedatectl set-ntp true
-
 
 
 # delete everything
@@ -34,31 +32,23 @@ fdisk /dev/nvme0n1 --wipe always --wipe-partitions always <<EOF &&
     1
 
     +512M
-
     n
-    p
     2
 
     +250G
-
     n
-    p
     3
-
 
 
     t
     1
     EF
-
     t
     2
     83
-
     t
     3
     83
-
     w
 EOF
 
@@ -112,7 +102,7 @@ sed -i "/\[multilib\]/,/Include/"'s/^#//' /etc/pacman.conf &&
 sed -i "/Color/s/^#//" /etc/pacman.conf &&
 sed -i "/ParallelDownloads/s/^#//" /etc/pacman.conf &&
 reflector --country AT --latest 50 --sort rate --save /etc/pacman.d/mirrorlist &&
-pacstrap /mnt/arch base base-devel linux vim openssh git intel-ucode btrfs-progs grub grub-btrfs efibootmgr
+pacstrap /mnt/arch base base-devel linux linux-firmware vim openssh git intel-ucode btrfs-progs grub grub-btrfs efibootmgr
 
 # Generate fstab
 genfstab -U -p /mnt/arch >> /mnt/arch/etc/fstab
@@ -125,18 +115,27 @@ arch-chroot /mnt/arch /bin/bash -c "cryptsetup luksAddKey /dev/nvme0n1p2 /crypto
 # edit conf initframes conf and generate
 sed -i '/^BINARIES=/ s/()/(btrfs)/i' /mnt/arch/etc/mkinitcpio.conf &&
 sed -i '/^FILES=/ s/()/(\/crypto_keyfile.bin)/i' /mnt/arch/etc/mkinitcpio.conf &&
-sed -i '/^HOOKS=/ s/(.*)/\(base udev btrfs keyboard autodetect keymap consolefont modconf block encrypt filesystems fsck\)/i' /mnt/arch/etc/mkinitcpio.conf &&
+sed -i '/^HOOKS=/ s/(.*)/\(base udev keyboard autodetect keymap consolefont modconf block encrypt filesystems fsck\)/i' /mnt/arch/etc/mkinitcpio.conf &&
 arch-chroot /mnt/arch /bin/bash -c "mkinitcpio -p linux"
 
 # edit default grub config
 DISK='/dev/nvme0n1p2'
 CRYPT_UUID=$( blkid -s UUID -o value $DISK ) && 
 sed -i "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=3/g" /mnt/arch/etc/default/grub &&
-# maybe set root= to not have to search for btrfs filesystem
-# root=\/dev\/mapper\/cryptroot\
 sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/\"loglevel=3 quiet\"/\"loglevel=3 quiet cryptdevice=UUID=$CRYPT_UUID\:crypt_arch\"/i" /mnt/arch/etc/default/grub &&
 sed -i "/^GRUB_PRELOAD_MODULES=/ s/\".*\"/\"part_gpt part_msdos luks\"/i" /mnt/arch/etc/default/grub &&
 sed -i "/^#GRUB_ENABLE_CRYPTODISK.*/s/^#//" /mnt/arch/etc/default/grub
+
+cat <<EOF >> /mnt/arch/etc/grub.d/40_custom
+menuentry "Reboot" {
+	  reboot
+}
+
+menuentry "Shut Down" {
+	  halt
+}
+EOF
+
 
 # set grub vimix theme
 arch-chroot /mnt/arch /bin/bash -c "git clone https://github.com/vinceliuice/grub2-themes.git /grub2-themes" &&
@@ -146,6 +145,7 @@ rm -rf /mnt/arch/grub2-themes &&
 sed -i "s|.*GRUB_THEME=.*|GRUB_THEME=\"boot\/grub\/themes\/vimix/theme.txt\"|" /mnt/arch/etc/default/grub &&
 sed -i "s|.*GRUB_GFXMODE=.*|GRUB_GFXMODE=1920x1080,auto|" /mnt/arch/etc/default/grub
 
+
 # Install grub
 arch-chroot /mnt/arch /bin/bash -c 'grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB' &&
 arch-chroot /mnt/arch /bin/bash -c 'grub-mkconfig -o /boot/grub/grub.cfg'
@@ -154,7 +154,8 @@ arch-chroot /mnt/arch /bin/bash -c 'grub-mkconfig -o /boot/grub/grub.cfg'
 echo "KEYMAP=de-latin1" > /mnt/arch/etc/vconsole.conf
 
 # Locale
-LOCALE='de_AT.UTF-8'
+#LOCALE='de_AT.UTF-8'
+LOCALE='en_US.UTF-8'
 sed -i "/$LOCALE/s/^#//g" /mnt/arch/etc/locale.gen && 
 arch-chroot /mnt/arch /bin/bash -c "locale-gen" && 
 echo "LANG=$LOCALE" > /mnt/arch/etc/locale.conf
@@ -213,7 +214,8 @@ arch-chroot /mnt/arch /bin/bash -c "chmod +w /etc/sudoers &&
     chmod 0440 /etc/sudoers"
 
 
-arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://aur.archlinux.org/yay-git.git ~/yay-git &&
+arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'export CARGO_HOME="$XDG_DATA_HOME"/cargo &&
+    git clone https://aur.archlinux.org/yay-git.git ~/yay-git &&
     cd ~/yay-git &&
     makepkg -si --noconfirm &&
     rm -rf ~/yay-git &&
@@ -221,9 +223,11 @@ arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://
 
 
 # Download dotfiles
-arch-chroot /mnt/arch /bin/bash -c "git clone https://github.com/FromWau/dotfiles.git" 
-    cp -r /mnt/arch/dotfiles/.zshenv /mnt/arch/home/"$USER_NAME" &&
-    cp -r /mnt/arch/dotfiles/.config /mnt/arch/home/"$USER_NAME"
+arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://github.com/FromWau/dotfiles.git && 
+    cp -r ~/dotfiles/.zshenv ~ &&
+    cp -r ~/dotfiles/.config ~ &&
+    cp -r ~/dotfiles/.local ~ && 
+    rm -rf ~/dotfiles'" 
 
 
 # Create playerctld.service
@@ -248,11 +252,17 @@ arch-chroot /mnt/arch /bin/bash -c "systemctl enable NetworkManager &&
     systemctl enable bluetooth.service &&
     systemctl enable upower.service &&
     systemctl --user enable playerctld.service"
+# iwd
+# systemd-networkd
 
 # Setup NetworkManager use iwd as backend and copy already setup networks
-printf "[device]\nwifi.backend=iwd" > /mnt/arch/etc/NetworkManager/conf.d/wifi_backend.conf && 
-    mkdir -p /mnt/arch/var/lib/iwd/ &&
-    cp -r /var/lib/iwd/* /mnt/arch/var/lib/iwd/
+printf "[device]\nwifi.backend=iwd\n" > /mnt/arch/etc/NetworkManager/conf.d/wifi_backend.conf && 
+mkdir -p /mnt/arch/var/lib/iwd/ &&
+cp -r /var/lib/iwd/* /mnt/arch/var/lib/iwd/
+
+
+# Setup nvim
+arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'nvim --headless +source +PackerSync +qa'"
 
 
 # Enable wheel properly
@@ -260,11 +270,6 @@ arch-chroot /mnt/arch /bin/bash -c "chmod +w /etc/sudoers &&
     sed -i 's/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/g' /etc/sudoers &&
     sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/g' /etc/sudoers &&
     chmod 0440 /etc/sudoers"
-
-
-
-# Setup nvim
-arch-chroot /mnt/arch /bin/bash -c "runuser -l $USER_NAME -c 'nvim --headless +source +PackerSync +qa'"
 
 
 # Clean up home (remove cargo)
@@ -277,7 +282,7 @@ echo 'for changing the keymap use:'
 echo 'localectl set-x11-keymap de'
 echo
 echo 'to reboot run:'
-echo 'umount -R /mnt/arch && reboot'
+echo 'umount -R /mnt/arch; reboot'
 
 
 exit 0
@@ -291,7 +296,7 @@ exit 0
 
 
 
-
+# Gentoo part is not done. =================
 
 # GENTOO
 cryptsetup luksFormat --type luks2 --key-size 512 /dev/nvme0n1p3 &&
